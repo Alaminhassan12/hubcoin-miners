@@ -43,7 +43,7 @@ bot.start(async (ctx) => {
         const newUserPayload = {
             name: newUser.first_name,
             username: newUser.username || '',
-            balance: 0,
+            balance: 25, // Welcome bonus
             gems: 0,
             unclaimedGems: 0,
             refs: 0,
@@ -56,42 +56,49 @@ bot.start(async (ctx) => {
             claimedGemsToday: 0
         };
 
-        // If referred by someone, process the reward
-        if (referrerId) {
-            console.log(`User was referred by: ${referrerId}`);
-            const referrerRef = db.collection('users').doc(referrerId);
-            const referrerDoc = await referrerRef.get();
+        try {
+            // Use a batch to ensure all initial operations succeed or fail together
+            const batch = db.batch();
 
-            if (referrerDoc.exists) {
-                try {
-                    // Using a batch to ensure both operations succeed or fail together
-                    const batch = db.batch();
-                    
-                    // 1. Create the new user
-                    batch.set(userRef, newUserPayload);
-                    
-                    // 2. Reward the referrer
+            // 1. Create the new user
+            batch.set(userRef, newUserPayload);
+
+            // 2. Create a transaction for the new user's welcome bonus
+            const transactionRef = db.collection('transactions').doc();
+            batch.set(transactionRef, {
+                userId: String(newUser.id),
+                description: 'Welcome Bonus',
+                amount: 25,
+                type: 'credit',
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            // 3. If referred by someone, process the reward
+            if (referrerId) {
+                const referrerRef = db.collection('users').doc(referrerId);
+                const referrerDoc = await referrerRef.get();
+
+                if (referrerDoc.exists) {
+                    console.log(`User was referred by: ${referrerId}`);
+                    // Add referrer reward to the batch
                     batch.update(referrerRef, {
                         balance: admin.firestore.FieldValue.increment(25),
                         unclaimedGems: admin.firestore.FieldValue.increment(2),
                         refs: admin.firestore.FieldValue.increment(1)
                     });
-                    
-                    await batch.commit();
-                    console.log(`Successfully rewarded referrer ${referrerId}`);
-
-                    // 3. Notify the referrer
-                    await ctx.telegram.sendMessage(
-                        referrerId,
-                        `🎉 Congratulations! A new user, ${newUser.first_name}, has joined using your link. You've earned 25 TK and 2 Gems!`
-                    );
-                } catch (error) {
-                    console.error("Error processing referral reward:", error);
                 }
             }
-        } else {
-            // If not referred, just create the user
-            await userRef.set(newUserPayload);
+
+            await batch.commit();
+            console.log(`Successfully created new user ${newUser.id}.`);
+
+            // 4. Notify the referrer (outside the batch) if they exist
+            if (referrerId && (await db.collection('users').doc(referrerId).get()).exists) {
+                await ctx.telegram.sendMessage(referrerId, `🎉 Congratulations! A new user, ${newUser.first_name}, has joined using your link. You've earned 25 TK and 2 Gems!`);
+                console.log(`Successfully rewarded and notified referrer ${referrerId}`);
+            }
+        } catch (error) {
+            console.error("Error during new user creation/referral processing:", error);
         }
     }
 
@@ -99,13 +106,23 @@ bot.start(async (ctx) => {
     const welcomeMessage = `👋 Welcome, ${newUser.first_name}!`;
     const miniAppUrl = process.env.FRONTEND_URL;
 
+    // নতুন টেক্সট এবং বাটনসহ মেসেজ
+    const newCaption = `${welcomeMessage}\n\n💎 Earn daily by watching ads & referring friends. Withdraw easily to bKash, Nagad, or Binance 🚀\nPer refer 25৳\nPer ads 15৳`;
+
     await ctx.replyWithPhoto(
         'https://i.postimg.cc/J4YSvR0M/start-image.png',
         {
-            caption: welcomeMessage,
+            caption: newCaption, // এখানে নতুন ক্যাপশন ব্যবহার করা হয়েছে
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: '🚀 Open Mini App', web_app: { url: miniAppUrl } }]
+                    // সারি ১: আগের বাটনটি
+                    [{ text: '🚀 Open Mini App', web_app: { url: miniAppUrl } }],
+                    
+                    // সারি ২: নতুন জয়েন চ্যানেল বাটন
+                    [{ text: 'Join Channel', url: 'https://t.me/HubCoin_miner' }],
+                    
+                    // সারি ৩: নতুন ইউটিউব বাটন
+                    [{ text: 'কিভাবে কাজ করবেন!', url: 'https://youtube.com/@hubcoin_miner?si=LDCKadRWDKsGqG0j' }]
                 ]
             }
         }
