@@ -169,6 +169,119 @@ app.post('/claim-gems', async (req, res) => {
 });
 
 
+// --- ADVANCED MAILING/BROADCAST FEATURE WITH CONFIRMATION ---
+
+const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID);
+
+// This object will store the state of the admin's mailing process
+const mailingState = {};
+
+// --- Step 1: Admin starts the process with /mailing ---
+bot.command('mailing', (ctx) => {
+    if (ctx.from.id !== ADMIN_USER_ID) {
+        return ctx.reply('Sorry, you are not authorized to use this command.');
+    }
+
+    // Set the state: Bot is now waiting for the message content from the admin
+    mailingState[ADMIN_USER_ID] = { step: 'awaiting_message' };
+    
+    // Ask the admin to send the message
+    ctx.reply('❇️ Send the message you want to broadcast to all users.');
+});
+
+// --- Step 2: Bot listens for the next message from the admin ---
+bot.on('message', async (ctx) => {
+    // Check if the message is from the admin AND if the admin is in the mailing process
+    if (ctx.from.id === ADMIN_USER_ID && mailingState[ADMIN_USER_ID]?.step === 'awaiting_message') {
+        
+        // Store the message to be sent and move to the confirmation step
+        mailingState[ADMIN_USER_ID].message = ctx.message;
+        mailingState[ADMIN_USER_ID].step = 'awaiting_confirmation';
+
+        // Show the confirmation prompt
+        await ctx.reply('❇️ Please check the message below and confirm the broadcast...');
+        
+        // Forward the exact message to the admin for confirmation
+        await ctx.telegram.copyMessage(ctx.chat.id, ctx.chat.id, ctx.message.message_id);
+
+        // Add "Send" and "Cancel" buttons
+        await ctx.reply('Are you sure you want to send this to all users?', {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '✅ Send', callback_data: 'confirm_broadcast' },
+                        { text: '❌ Cancel', callback_data: 'cancel_broadcast' }
+                    ]
+                ]
+            }
+        });
+    }
+});
+
+
+// --- Step 3: Admin clicks "Send" or "Cancel" button ---
+
+// If "Cancel" is clicked
+bot.action('cancel_broadcast', (ctx) => {
+    if (ctx.from.id !== ADMIN_USER_ID) return;
+
+    // Clear the state
+    delete mailingState[ADMIN_USER_ID];
+    
+    ctx.editMessageText('Mailing cancelled.');
+});
+
+// If "Send" is clicked
+bot.action('confirm_broadcast', async (ctx) => {
+    if (ctx.from.id !== ADMIN_USER_ID) return;
+
+    const messageToSend = mailingState[ADMIN_USER_ID]?.message;
+    if (!messageToSend) {
+        return ctx.editMessageText('Something went wrong. Please start over with /mailing.');
+    }
+
+    // Clear the state immediately to prevent double sending
+    delete mailingState[ADMIN_USER_ID];
+    
+    await ctx.editMessageText('Broadcast started... I will send you a report when finished.');
+
+    // --- The actual broadcasting logic starts here ---
+    try {
+        const usersSnapshot = await db.collection('users').get();
+        if (usersSnapshot.empty) {
+            return ctx.reply('No users found in the database.');
+        }
+
+        let successCount = 0;
+        let failureCount = 0;
+        const promises = [];
+
+        usersSnapshot.forEach(doc => {
+            const userId = doc.id;
+            // Use copyMessage to send any type of message (text, photo, etc.)
+            const promise = ctx.telegram.copyMessage(userId, messageToSend.chat.id, messageToSend.message_id)
+                .then(() => successCount++)
+                .catch(err => {
+                    console.log(`Failed to send to ${userId}:`, err.message);
+                    failureCount++;
+                });
+            promises.push(promise);
+        });
+        
+        await Promise.all(promises);
+
+        await ctx.reply(
+            `Broadcast finished.\n` +
+            `✅ Successfully sent to: ${successCount} users.\n` +
+            `❌ Failed to send to: ${failureCount} users.`
+        );
+
+    } catch (error) {
+        console.error("Broadcast error:", error);
+        await ctx.reply('An error occurred during the broadcast.');
+    }
+});
+
 // --- START SERVER AND BOT ---
 
 const PORT = process.env.PORT || 3000;
