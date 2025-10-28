@@ -29,21 +29,36 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // --- TELEGRAM BOT LOGIC ---
 
+// +++ নতুন এবং আপগ্রেড করা bot.start ফাংশন +++
 bot.start(async (ctx) => {
-    const referrerId = ctx.startPayload; // User A's ID
-    const newUser = ctx.from; // User B's info
-
+    const referrerId = ctx.startPayload;
+    const newUser = ctx.from;
     const userRef = db.collection('users').doc(String(newUser.id));
     const userDoc = await userRef.get();
 
-    // Check if the user is new
+    // ১. ব্যবহারকারীর প্রোফাইল ছবির URL নিয়ে আসুন
+    let photoUrl = `https://i.pravatar.cc/150?u=${newUser.id}`; // ডিফল্ট ছবি
+    try {
+        const userProfilePhotos = await ctx.telegram.getUserProfilePhotos(newUser.id);
+        if (userProfilePhotos.total_count > 0) {
+            // সবচেয়ে ভালো কোয়ালিটির ছবিটি (সাধারণত শেষেরটি) নিন
+            const fileId = userProfilePhotos.photos[0].pop().file_id;
+            const fileLink = await ctx.telegram.getFileLink(fileId);
+            photoUrl = fileLink.href;
+        }
+    } catch (error) {
+        console.log(`Could not fetch profile photo for user ${newUser.id}:`, error.message);
+    }
+
+    // ২. ব্যবহারকারী নতুন হলে তাকে তৈরি করুন
     if (!userDoc.exists) {
         console.log(`New user detected: ${newUser.first_name} (ID: ${newUser.id})`);
         
         const newUserPayload = {
             name: newUser.first_name,
             username: newUser.username || '',
-            balance: 25, // Welcome bonus
+            photoUrl: photoUrl, // +++ নতুন ফিল্ড যোগ করা হলো +++
+            balance: 25,
             gems: 0,
             unclaimedGems: 0,
             refs: 0,
@@ -52,18 +67,15 @@ bot.start(async (ctx) => {
             totalWithdrawn: 0,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             referredBy: referrerId || null,
-            lastClaimDate: null,
-            claimedGemsToday: 0
+            lastClaimDate: null, // This and below are for gem claims
+            claimedGemsToday: 0,
+            completedTasks: [] // For bonus tasks
         };
 
         try {
-            // Use a batch to ensure all initial operations succeed or fail together
             const batch = db.batch();
-
-            // 1. Create the new user
             batch.set(userRef, newUserPayload);
 
-            // 2. Create a transaction for the new user's welcome bonus
             const transactionRef = db.collection('transactions').doc();
             batch.set(transactionRef, {
                 userId: String(newUser.id),
@@ -73,41 +85,50 @@ bot.start(async (ctx) => {
                 timestamp: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            // 3. If referred by someone, process the reward
             if (referrerId) {
                 const referrerRef = db.collection('users').doc(referrerId);
                 const referrerDoc = await referrerRef.get();
-
                 if (referrerDoc.exists) {
                     console.log(`User was referred by: ${referrerId}`);
-                    // Add referrer reward to the batch
                     batch.update(referrerRef, {
                         balance: admin.firestore.FieldValue.increment(25),
                         unclaimedGems: admin.firestore.FieldValue.increment(2),
                         refs: admin.firestore.FieldValue.increment(1)
                     });
+
+                    // Notify referrer outside the batch
+                    ctx.telegram.sendMessage(referrerId, `🎉 Congratulations! A new user, ${newUser.first_name}, has joined using your link. You've earned 25 TK and 2 Gems!`)
+                        .catch(err => console.log(`Failed to notify referrer ${referrerId}:`, err.message));
                 }
             }
 
             await batch.commit();
-            console.log(`Successfully created new user ${newUser.id}.`);
-
-            // 4. Notify the referrer (outside the batch) if they exist
-            if (referrerId && (await db.collection('users').doc(referrerId).get()).exists) {
-                await ctx.telegram.sendMessage(referrerId, `🎉 Congratulations! A new user, ${newUser.first_name}, has joined using your link. You've earned 25 TK and 2 Gems!`);
-                console.log(`Successfully rewarded and notified referrer ${referrerId}`);
-            }
+            console.log(`Successfully created new user ${newUser.id} with photo URL.`);
         } catch (error) {
-            console.error("Error during new user creation/referral processing:", error);
+            console.error("Error during new user creation:", error);
         }
+    // ৩. ব্যবহারকারী পুরনো হলে, শুধু তার নাম এবং ছবি আপডেট করুন
+    } else {
+        await userRef.update({
+            name: newUser.first_name,
+            photoUrl: photoUrl // ব্যবহারকারী ছবি পরিবর্তন করলে যেন আপডেট হয়ে যায়
+        });
     }
 
     // Send welcome message to all users (new and old) on /start
-    const welcomeMessage = `👋 Welcome, ${newUser.first_name}!`;
     const miniAppUrl = process.env.FRONTEND_URL;
 
-    // নতুন টেক্সট এবং বাটনসহ মেসেজ
-    const newCaption = `${welcomeMessage}\n\n💎 Earn daily by watching ads & referring friends. Withdraw easily to bKash, Nagad, or Binance 🚀\nPer refer 25৳\nPer ads 15৳`;
+    // নতুন, আধুনিক এবং সাজানো ওয়েলকাম মেসেজ
+    const newCaption = `🌟 **Welcome to HubCoin, ${newUser.first_name}!**
+
+Your journey to daily earnings starts now.
+
+💰 **How to Earn:**
+  - **Watch Ads:** Earn ৳15 for each ad.
+  - **Refer Friends:** Get ৳25 for every referral.
+
+💸 **Withdrawals:**
+  - Easily cash out via bKash, Nagad, or Binance.`;
 
     await ctx.replyWithPhoto(
         'https://i.postimg.cc/J4YSvR0M/start-image.png',
