@@ -116,16 +116,25 @@ bot.start(async (ctx) => {
     }
 
     // Send welcome message to all users (new and old) on /start
-    const welcomeMessage = `👋 Welcome, ${newUser.first_name}!`;
     const miniAppUrl = process.env.FRONTEND_URL;
 
-    // নতুন টেক্সট এবং বাটনসহ মেসেজ
-    const newCaption = `${welcomeMessage}\n\n💎 Earn daily by watching ads & referring friends. Withdraw easily to bKash, Nagad, or Binance 🚀\nPer refer 25৳\nPer ads 15৳`;
+    // ছবির মতো নতুন ক্যাপশন
+    const newCaption = `🌟 **Welcome to HubCoin, ${newUser.first_name}!**
+Your journey to daily earnings starts now.
+
+💰 **How to Earn:**
+- **Watch Ads:** Earn ৳15 for each ad.
+- **Refer Friends:** Get ৳25 for every referral.
+
+💸 **Withdrawals:**
+- Easily cash out via bKash, Nagad, or Binance.`;
 
     await ctx.replyWithPhoto(
-        'https://i.postimg.cc/J4YSvR0M/start-image.png',
+        'https://i.postimg.cc/J4YSvR0M/start-image.png', // আপনি চাইলে ছবির URL পরিবর্তন করতে পারেন
         {
-            caption: newCaption, // এখানে নতুন ক্যাপশন ব্যবহার করা হয়েছে
+            caption: newCaption,
+            parse_mode: 'Markdown', // এই লাইনটি খুবই গুরুত্বপূর্ণ
+
             reply_markup: {
                 inline_keyboard: [
                     // সারি ১: আগের বাটনটি
