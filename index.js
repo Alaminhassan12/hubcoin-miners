@@ -29,97 +29,15 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // --- TELEGRAM BOT LOGIC ---
 
-// +++ নতুন এবং আপগ্রেড করা bot.start ফাংশন +++
+// index.js
+
+// +++ নতুন এবং সহজ bot.start ফাংশন +++
 bot.start(async (ctx) => {
-    const referrerId = ctx.startPayload;
-    const newUser = ctx.from;
-    const userRef = db.collection('users').doc(String(newUser.id));
-    const userDoc = await userRef.get();
-
-    // ১. ব্যবহারকারীর প্রোফাইল ছবির URL নিয়ে আসুন
-    let photoUrl = `https://i.pravatar.cc/150?u=${newUser.id}`; // ডিফল্ট ছবি
-    try {
-        const userProfilePhotos = await ctx.telegram.getUserProfilePhotos(newUser.id);
-        if (userProfilePhotos.total_count > 0) {
-            // সবচেয়ে ভালো কোয়ালিটির ছবিটি (সাধারণত শেষেরটি) নিন
-            const fileId = userProfilePhotos.photos[0].pop().file_id;
-            const fileLink = await ctx.telegram.getFileLink(fileId);
-            photoUrl = fileLink.href;
-        }
-    } catch (error) {
-        console.log(`Could not fetch profile photo for user ${newUser.id}:`, error.message);
-    }
-
-    // ২. ব্যবহারকারী নতুন হলে তাকে তৈরি করুন
-    if (!userDoc.exists) {
-        console.log(`New user detected: ${newUser.first_name} (ID: ${newUser.id})`);
-        
-        const newUserPayload = {
-            name: newUser.first_name,
-            username: newUser.username || '',
-            photoUrl: photoUrl, // +++ নতুন ফিল্ড যোগ করা হলো +++
-            balance: 25,
-            gems: 0,
-            unclaimedGems: 0,
-            refs: 0,
-            adWatch: 0,
-            todayIncome: 0,
-            totalWithdrawn: 0,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            referredBy: referrerId || null,
-            lastClaimDate: null, // This and below are for gem claims
-            claimedGemsToday: 0,
-            completedTasks: [] // For bonus tasks
-        };
-
-        try {
-            const batch = db.batch();
-            batch.set(userRef, newUserPayload);
-
-            const transactionRef = db.collection('transactions').doc();
-            batch.set(transactionRef, {
-                userId: String(newUser.id),
-                description: 'Welcome Bonus',
-                amount: 25,
-                type: 'credit',
-                timestamp: admin.firestore.FieldValue.serverTimestamp()
-            });
-
-            if (referrerId) {
-                const referrerRef = db.collection('users').doc(referrerId);
-                const referrerDoc = await referrerRef.get();
-                if (referrerDoc.exists) {
-                    console.log(`User was referred by: ${referrerId}`);
-                    batch.update(referrerRef, {
-                        balance: admin.firestore.FieldValue.increment(25),
-                        unclaimedGems: admin.firestore.FieldValue.increment(2),
-                        refs: admin.firestore.FieldValue.increment(1)
-                    });
-
-                    // Notify referrer outside the batch
-                    ctx.telegram.sendMessage(referrerId, `🎉 Congratulations! A new user, ${newUser.first_name}, has joined using your link. You've earned 25 TK and 2 Gems!`)
-                        .catch(err => console.log(`Failed to notify referrer ${referrerId}:`, err.message));
-                }
-            }
-
-            await batch.commit();
-            console.log(`Successfully created new user ${newUser.id} with photo URL.`);
-        } catch (error) {
-            console.error("Error during new user creation:", error);
-        }
-    // ৩. ব্যবহারকারী পুরনো হলে, শুধু তার নাম এবং ছবি আপডেট করুন
-    } else {
-        await userRef.update({
-            name: newUser.first_name,
-            photoUrl: photoUrl // ব্যবহারকারী ছবি পরিবর্তন করলে যেন আপডেট হয়ে যায়
-        });
-    }
-
-    // Send welcome message to all users (new and old) on /start
+    const user = ctx.from;
     const miniAppUrl = process.env.FRONTEND_URL;
 
-    // নতুন, আধুনিক এবং সাজানো ওয়েলকাম মেসেজ
-    const newCaption = `🌟 **Welcome to HubCoin, ${newUser.first_name}!**
+    // এখন এর কাজ শুধু ওয়েলকাম মেসেজ ও বাটন দেখানো
+    const caption = `🌟 **Welcome to HubCoin, ${user.first_name}!**
 
 Your journey to daily earnings starts now.
 
@@ -133,7 +51,7 @@ Your journey to daily earnings starts now.
     await ctx.replyWithPhoto(
         'https://i.postimg.cc/J4YSvR0M/start-image.png',
         {
-            caption: newCaption, // এখানে নতুন ক্যাপশন ব্যবহার করা হয়েছে
+            caption: caption,
             reply_markup: {
                 inline_keyboard: [
                     // সারি ১: আগের বাটনটি
@@ -203,6 +121,92 @@ app.post('/claim-gems', async (req, res) => {
     } catch (error) {
         console.error(`Error claiming gems for user ${userId}:`, error.message);
         res.status(400).json({ message: error.message });
+    }
+});
+
+// index.js
+
+// --- নতুন ইউজার ইনিশিয়ালাইজ করার জন্য API এন্ডপয়েন্ট ---
+app.post('/initialize-user', async (req, res) => {
+    // দ্রষ্টব্য: এখানে initData ভেরিফিকেশন যোগ করা অত্যন্ত জরুরি, আপাতত সহজ রাখছি
+    const { userId, firstName, username, photoUrl, referrerId } = req.body;
+
+    if (!userId) {
+        return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const userRef = db.collection('users').doc(String(userId));
+    
+    try {
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            console.log(`Initializing new user via API: ${firstName} (ID: ${userId})`);
+            
+            // নতুন ব্যবহারকারী তৈরি করার লজিক
+            const newUserPayload = {
+                name: firstName,
+                username: username || '',
+                photoUrl: photoUrl || `https://i.pravatar.cc/150?u=${userId}`,
+                balance: 25, // স্বাগতম বোনাস
+                gems: 0,
+                unclaimedGems: 0,
+                refs: 0,
+                adWatch: 0,
+                todayIncome: 0,
+                totalWithdrawn: 0,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                referredBy: referrerId || null,
+                lastClaimDate: null,
+                claimedGemsToday: 0,
+                completedTasks: []
+            };
+
+            const batch = db.batch();
+            batch.set(userRef, newUserPayload);
+
+            // স্বাগতম বোনাসের জন্য লেনদেন রেকর্ড
+            const transactionRef = db.collection('transactions').doc();
+            batch.set(transactionRef, {
+                userId: String(userId),
+                description: 'Welcome Bonus',
+                amount: 25,
+                type: 'credit',
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            // যদি রেফারার থাকে, তাকে বোনাস দিন
+            if (referrerId) {
+                const referrerRef = db.collection('users').doc(referrerId);
+                const referrerDoc = await referrerRef.get();
+                if (referrerDoc.exists) {
+                    console.log(`User was referred by: ${referrerId}`);
+                    batch.update(referrerRef, {
+                        balance: admin.firestore.FieldValue.increment(25),
+                        unclaimedGems: admin.firestore.FieldValue.increment(2),
+                        refs: admin.firestore.FieldValue.increment(1)
+                    });
+                    
+                    // রেফারারকে মেসেজ দিয়ে জানান
+                    bot.telegram.sendMessage(referrerId, `🎉 Congratulations! A new user, ${firstName}, has joined using your link. You've earned 25 TK and 2 Gems!`)
+                       .catch(err => console.log(`Failed to notify referrer ${referrerId}:`, err.message));
+                }
+            }
+            
+            await batch.commit();
+            return res.status(201).json({ message: 'User created successfully.' });
+
+        } else {
+            // যদি ব্যবহারকারী আগে থেকেই থাকে, শুধু তার নাম ও ছবি আপডেট করুন
+            await userRef.update({
+                name: firstName,
+                photoUrl: photoUrl || `https://i.pravatar.cc/150?u=${userId}`
+            });
+            return res.status(200).json({ message: 'User already exists, info updated.' });
+        }
+    } catch (error) {
+        console.error(`Error initializing user ${userId}:`, error.message);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
