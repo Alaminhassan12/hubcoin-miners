@@ -144,7 +144,7 @@ Your journey to daily earnings starts now.
                     [{ text: 'Join Channel', url: 'https://t.me/HubCoin_miner' }],
                     
                     // সারি ৩: নতুন ইউটিউব বাটন
-                    [{ text: 'কিভাবে কাজ করবেন!', url: 'https://youtube.com/@hubcoin_miner?si=LDCKadRWDKsGqG0j' }]
+                    [{ text: 'কিভাবে কাজ করবেন!', url: 'https://youtu.be/rRCHvLIIJ5s' }]
                 ]
             }
         }
