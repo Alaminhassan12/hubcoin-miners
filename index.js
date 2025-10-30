@@ -79,7 +79,7 @@ bot.start(async (ctx) => {
             const transactionRef = db.collection('transactions').doc();
             batch.set(transactionRef, {
                 userId: String(newUser.id),
-                description: 'Welcome Bonus',
+                description: 'স্বাগতম বোনাস',
                 amount: 25,
                 type: 'credit',
                 timestamp: admin.firestore.FieldValue.serverTimestamp()
@@ -97,7 +97,7 @@ bot.start(async (ctx) => {
                     });
 
                     // Notify referrer outside the batch
-                    ctx.telegram.sendMessage(referrerId, `🎉 Congratulations! A new user, ${newUser.first_name}, has joined using your link. You've earned 25 TK and 2 Gems!`)
+                    ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${newUser.first_name}, জয়েন করেছে। আপনি 25 টাকা এবং 2টি জেম পেয়েছেন!`)
                         .catch(err => console.log(`Failed to notify referrer ${referrerId}:`, err.message));
                 }
             }
@@ -119,15 +119,15 @@ bot.start(async (ctx) => {
     const miniAppUrl = process.env.FRONTEND_URL;
 
     // ছবির মতো নতুন ক্যাপশন
-    const newCaption = `🌟 **Welcome to HubCoin, ${newUser.first_name}!**
-Your journey to daily earnings starts now.
+    const newCaption = `🌟 **HubCoin-এ স্বাগতম, ${newUser.first_name}!**
+আপনার প্রতিদিনের আয়ের যাত্রা এখন শুরু।
 
-💰 **How to Earn:**
-- **Watch Ads:** Earn ৳15 for each ad.
-- **Refer Friends:** Get ৳25 for every referral.
+💰 **যেভাবে আয় করবেন:**
+- **বিজ্ঞাপন দেখুন:** প্রতিটি বিজ্ঞাপনের জন্য ৳15 আয় করুন।
+- **বন্ধুদের রেফার করুন:** প্রতিটি রেফারের জন্য ৳25 পান।
 
-💸 **Withdrawals:**
-- Easily cash out via bKash, Nagad, or Binance.`;
+💸 **টাকা উত্তোলন:**
+- খুব সহজে বিকাশ, নগদ, বা বাইন্যান্সের মাধ্যমে ক্যাশ আউট করুন।`;
 
     await ctx.replyWithPhoto(
         'https://i.postimg.cc/J4YSvR0M/start-image.png', // আপনি চাইলে ছবির URL পরিবর্তন করতে পারেন
@@ -138,10 +138,10 @@ Your journey to daily earnings starts now.
             reply_markup: {
                 inline_keyboard: [
                     // সারি ১: আগের বাটনটি
-                    [{ text: '🚀 Open Mini App', web_app: { url: miniAppUrl } }],
+                    [{ text: '🚀 মিনি অ্যাপ খুলুন', web_app: { url: miniAppUrl } }],
                     
                     // সারি ২: নতুন জয়েন চ্যানেল বাটন
-                    [{ text: 'Join Channel', url: 'https://t.me/HubCoin_miner' }],
+                    [{ text: 'চ্যানেলে যোগ দিন', url: 'https://t.me/HubCoin_miner' }],
                     
                     // সারি ৩: নতুন ইউটিউব বাটন
                     [{ text: 'কিভাবে কাজ করবেন!', url: 'https://youtu.be/rRCHvLIIJ5s' }]
@@ -158,7 +158,7 @@ app.post('/claim-gems', async (req, res) => {
     const { userId } = req.body;
 
     if (!userId) {
-        return res.status(400).json({ message: "User ID is required." });
+        return res.status(400).json({ message: "ব্যবহারকারীর আইডি প্রয়োজন।" });
     }
 
     const userRef = db.collection('users').doc(String(userId));
@@ -167,14 +167,14 @@ app.post('/claim-gems', async (req, res) => {
         await db.runTransaction(async (transaction) => {
             const userDoc = await transaction.get(userRef);
             if (!userDoc.exists) {
-                throw new Error("User not found.");
+                throw new Error("ব্যবহারকারীকে খুঁজে পাওয়া যায়নি।");
             }
 
             const userData = userDoc.data();
             const { unclaimedGems, lastClaimDate, claimedGemsToday } = userData;
             
             if (unclaimedGems <= 0) {
-                throw new Error("You have no gems to claim.");
+                throw new Error("আপনার ক্লেইম করার মতো কোনো জেম নেই।");
             }
 
             const today = new Date().toISOString().slice(0, 10); // Format: YYYY-MM-DD
@@ -186,7 +186,7 @@ app.post('/claim-gems', async (req, res) => {
             }
             
             if (currentClaimCount >= 6) {
-                throw new Error("You have reached your daily claim limit of 6 gems.");
+                throw new Error("আপনি জেম ক্লেইম করার দৈনিক সীমা (৬টি) অতিক্রম করেছেন।");
             }
             
             const gemsToClaim = Math.min(unclaimedGems, 6 - currentClaimCount);
@@ -199,7 +199,7 @@ app.post('/claim-gems', async (req, res) => {
             });
         });
 
-        res.status(200).json({ message: "Gems claimed successfully!" });
+        res.status(200).json({ message: "সফলভাবে জেম ক্লেইম করা হয়েছে!" });
 
     } catch (error) {
         console.error(`Error claiming gems for user ${userId}:`, error.message);
@@ -218,14 +218,13 @@ const mailingState = {};
 // --- Step 1: Admin starts the process with /mailing ---
 bot.command('mailing', (ctx) => {
     if (ctx.from.id !== ADMIN_USER_ID) {
-        return ctx.reply('Sorry, you are not authorized to use this command.');
+        return ctx.reply('দুঃখিত, এই কমান্ডটি ব্যবহার করার অনুমতি আপনার নেই।');
     }
 
     // Set the state: Bot is now waiting for the message content from the admin
     mailingState[ADMIN_USER_ID] = { step: 'awaiting_message' };
-    
+    ctx.reply('❇️ সকল ব্যবহারকারীকে যে বার্তাটি পাঠাতে চান, তা সেন্ড করুন।');
     // Ask the admin to send the message
-    ctx.reply('❇️ Send the message you want to broadcast to all users.');
 });
 
 // --- Step 2: Bot listens for the next message from the admin ---
@@ -237,11 +236,11 @@ bot.on('message', async (ctx) => {
         mailingState[ADMIN_USER_ID].message = ctx.message;
         mailingState[ADMIN_USER_ID].step = 'awaiting_confirmation';
 
-        // Show the confirmation prompt
-        await ctx.reply('❇️ Please check the message below and confirm the broadcast...');
+        await ctx.reply('❇️ অনুগ্রহ করে নীচের বার্তাটি যাচাই করুন এবং ব্রডকাস্ট নিশ্চিত করুন...');
         
         // Forward the exact message to the admin for confirmation
         await ctx.telegram.copyMessage(ctx.chat.id, ctx.chat.id, ctx.message.message_id);
+
 
         // Add "Send" and "Cancel" buttons
         await ctx.reply('Are you sure you want to send this to all users?', {
@@ -249,7 +248,7 @@ bot.on('message', async (ctx) => {
                 inline_keyboard: [
                     [
                         { text: '✅ Send', callback_data: 'confirm_broadcast' },
-                        { text: '❌ Cancel', callback_data: 'cancel_broadcast' }
+                        { text: '❌ বাতিল করুন', callback_data: 'cancel_broadcast' }
                     ]
                 ]
             }
@@ -265,14 +264,14 @@ bot.action('cancel_broadcast', (ctx) => {
     if (ctx.from.id !== ADMIN_USER_ID) return;
 
     // Clear the state
-    delete mailingState[ADMIN_USER_ID];
-    
-    ctx.editMessageText('Mailing cancelled.');
+    delete mailingState[ADMIN_USER_ID];    
+    ctx.editMessageText('মেইলিং বাতিল করা হয়েছে।');
 });
 
 // If "Send" is clicked
 bot.action('confirm_broadcast', async (ctx) => {
     if (ctx.from.id !== ADMIN_USER_ID) return;
+
 
     const messageToSend = mailingState[ADMIN_USER_ID]?.message;
     if (!messageToSend) {
@@ -281,14 +280,14 @@ bot.action('confirm_broadcast', async (ctx) => {
 
     // Clear the state immediately to prevent double sending
     delete mailingState[ADMIN_USER_ID];
-    
-    await ctx.editMessageText('Broadcast started... I will send you a report when finished.');
+    await ctx.editMessageText('ব্রডকাস্ট শুরু হয়েছে... শেষ হলে আমি আপনাকে একটি রিপোর্ট পাঠাবো।');
+
 
     // --- The actual broadcasting logic starts here ---
     try {
         const usersSnapshot = await db.collection('users').get();
         if (usersSnapshot.empty) {
-            return ctx.reply('No users found in the database.');
+            return ctx.reply('ডাটাবেসে কোনো ব্যবহারকারী পাওয়া যায়নি।');
         }
 
         let successCount = 0;
@@ -310,14 +309,13 @@ bot.action('confirm_broadcast', async (ctx) => {
         await Promise.all(promises);
 
         await ctx.reply(
-            `Broadcast finished.\n` +
-            `✅ Successfully sent to: ${successCount} users.\n` +
-            `❌ Failed to send to: ${failureCount} users.`
+            `ব্রডকাস্ট সম্পন্ন হয়েছে।\n` +
+            `✅ সফলভাবে পাঠানো হয়েছে: ${successCount} জন ব্যবহারকারীকে।\n` +
+            `❌ পাঠাতে ব্যর্থ হয়েছে: ${failureCount} জন ব্যবহারকারীকে।`
         );
-
     } catch (error) {
         console.error("Broadcast error:", error);
-        await ctx.reply('An error occurred during the broadcast.');
+        await ctx.reply('ব্রডকাস্ট করার সময় একটি ত্রুটি ঘটেছে।');
     }
 });
 
