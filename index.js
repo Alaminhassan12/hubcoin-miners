@@ -69,7 +69,8 @@ bot.start(async (ctx) => {
             referredBy: referrerId || null,
             lastClaimDate: null, // This and below are for gem claims
             claimedGemsToday: 0,
-            completedTasks: [] // For bonus tasks
+            completedTasks: [], // For bonus tasks
+            leaderboardUnlocked: false // <-- শুধু এই লাইনটি যোগ করুন
         };
 
         try {
