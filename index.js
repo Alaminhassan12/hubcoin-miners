@@ -324,7 +324,7 @@ bot.action('confirm_broadcast', async (ctx) => {
 // Adsgram এই URL-এ রিকোয়েস্ট পাঠিয়ে পুরস্কার দেবে
 app.get('/api/grant-reward-firestore', async (req, res) => {
     const { userid } = req.query;
-    const REWARD_AMOUNT = 15; // পুরস্কারের পরিমাণ
+    const REWARD_GEMS = 1; // +++ পুরস্কার পরিবর্তন করে ১ জেম করা হলো +++
 
     if (!userid) {
         console.log('Adsgram Callback Error: userid পাওয়া যায়নি।');
@@ -336,14 +336,35 @@ app.get('/api/grant-reward-firestore', async (req, res) => {
     try {
         const userRef = db.collection('users').doc(String(userid));
         await userRef.update({
-            // এখানে main balance বাড়ানো হচ্ছে, bonus balance নয়
-            balance: admin.firestore.FieldValue.increment(REWARD_AMOUNT) 
+            // +++ balance এর পরিবর্তে gems বাড়ানো হচ্ছে +++
+            gems: admin.firestore.FieldValue.increment(REWARD_GEMS) 
         });
-        console.log(`সফলভাবে ৳${REWARD_AMOUNT} পুরস্কার দেওয়া হয়েছে: User ${userid}`);
+        console.log(`সফলভাবে ${REWARD_GEMS} জেম পুরস্কার দেওয়া হয়েছে: User ${userid}`);
         res.status(200).json({ success: true });
     } catch (error) {
         console.error(`Adsgram Callback Error (User ${userid}):`, error);
         res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
+// +++ নতুন Rewarded Ad দেখার পুরস্কার (১ জেম) দেওয়ার জন্য Endpoint +++
+app.post('/grant-ad-reward-gem', async (req, res) => {
+    const { userId } = req.body; // apiRequest থেকে userId স্বয়ংক্রিয়ভাবে আসে
+
+    if (!userId) {
+        return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    try {
+        const userRef = db.collection('users').doc(String(userId));
+        await userRef.update({
+            gems: admin.firestore.FieldValue.increment(1) // ব্যবহারকারীর জেম ১ বাড়িয়ে দিন
+        });
+        console.log(`Successfully granted 1 bonus gem to user ${userId} for watching an ad.`);
+        res.status(200).json({ success: true, message: 'Bonus gem granted' });
+    } catch (error) {
+        console.error(`Error granting bonus gem to ${userId}:`, error);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
