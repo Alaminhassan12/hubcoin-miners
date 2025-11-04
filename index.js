@@ -320,6 +320,33 @@ bot.action('confirm_broadcast', async (ctx) => {
     }
 });
 
+// +++ নতুন Adsgram Task Ad-এর জন্য API Endpoint +++
+// Adsgram এই URL-এ রিকোয়েস্ট পাঠিয়ে পুরস্কার দেবে
+app.get('/api/grant-reward-firestore', async (req, res) => {
+    const { userid } = req.query;
+    const REWARD_AMOUNT = 15; // পুরস্কারের পরিমাণ
+
+    if (!userid) {
+        console.log('Adsgram Callback Error: userid পাওয়া যায়নি।');
+        return res.status(400).json({ success: false, message: 'User ID is required.' });
+    }
+
+    console.log(`Adsgram থেকে পুরস্কারের রিকোয়েস্ট এসেছে: User ${userid}`);
+
+    try {
+        const userRef = db.collection('users').doc(String(userid));
+        await userRef.update({
+            // এখানে main balance বাড়ানো হচ্ছে, bonus balance নয়
+            balance: admin.firestore.FieldValue.increment(REWARD_AMOUNT) 
+        });
+        console.log(`সফলভাবে ৳${REWARD_AMOUNT} পুরস্কার দেওয়া হয়েছে: User ${userid}`);
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error(`Adsgram Callback Error (User ${userid}):`, error);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
 // --- START SERVER AND BOT ---
 
 const PORT = process.env.PORT || 3000;
