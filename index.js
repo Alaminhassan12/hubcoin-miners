@@ -347,27 +347,6 @@ app.get('/api/grant-reward-firestore', async (req, res) => {
     }
 });
 
-// +++ নতুন Rewarded Ad দেখার পুরস্কার (১ জেম) দেওয়ার জন্য Endpoint +++
-app.post('/grant-ad-reward-gem', async (req, res) => {
-    const { userId } = req.body; // apiRequest থেকে userId স্বয়ংক্রিয়ভাবে আসে
-
-    if (!userId) {
-        return res.status(400).json({ success: false, message: 'User ID is required' });
-    }
-
-    try {
-        const userRef = db.collection('users').doc(String(userId));
-        await userRef.update({
-            gems: admin.firestore.FieldValue.increment(1) // ব্যবহারকারীর জেম ১ বাড়িয়ে দিন
-        });
-        console.log(`Successfully granted 1 bonus gem to user ${userId} for watching an ad.`);
-        res.status(200).json({ success: true, message: 'Bonus gem granted' });
-    } catch (error) {
-        console.error(`Error granting bonus gem to ${userId}:`, error);
-        res.status(500).json({ success: false, message: 'Server error' });
-    }
-});
-
 // --- START SERVER AND BOT ---
 
 const PORT = process.env.PORT || 3000;
