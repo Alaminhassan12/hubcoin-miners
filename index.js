@@ -208,41 +208,6 @@ app.post('/claim-gems', async (req, res) => {
     }
 });
 
-/**
- * AdsGram থেকে পাঠানো রিওয়ার্ড কলব্যাক গ্রহণ করে Firestore-এ ব্যালেন্স আপডেট করার API এন্ডপয়েন্ট।
- */
-app.get('/api/adsgram-reward', async (req, res) => {
-    try {
-        // ধাপ ১: URL থেকে ব্যবহারকারীর আইডি (userId) বের করা
-        const userId = req.query.userid;
-
-        if (!userId) {
-            console.error("AdsGram callback: User ID is missing.");
-            return res.status(400).json({ message: 'User ID is missing.' });
-        }
-
-        console.log(`[AdsGram] Received reward callback for user: ${userId}`);
-
-        // ধাপ ২: Firestore-এ নির্দিষ্ট ব্যবহারকারীকে খুঁজে বের করা
-        const userRef = db.collection('users').doc(String(userId));
-        
-        // পুরস্কারের পরিমাণ
-        const rewardAmount = 15; // প্রতিটি বিজ্ঞাপনের জন্য ১৫ টাকা
-
-        // ধাপ ৩: Firestore-এ ব্যবহারকারীর ব্যালেন্স নিরাপদে বাড়িয়ে দেওয়া
-        await userRef.update({
-            balance: admin.firestore.FieldValue.increment(rewardAmount)
-        });
-        
-        // ধাপ ৪: সফলভাবে পুরস্কার দেওয়ার পর AdsGram-কে একটি সফল বার্তা পাঠানো
-        console.log(`[AdsGram] Successfully rewarded ${rewardAmount} to user ${userId}.`);
-        res.status(200).send('Reward granted.');
-
-    } catch (error) {
-        console.error('[AdsGram] Error processing reward for Firestore:', error);
-        res.status(500).send('Internal Server Error.');
-    }
-});
 
 // --- ADVANCED MAILING/BROADCAST FEATURE WITH CONFIRMATION ---
 
