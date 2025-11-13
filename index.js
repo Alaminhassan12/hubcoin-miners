@@ -62,6 +62,7 @@ bot.start(async (ctx) => {
             gems: 0,
             unclaimedGems: 0,
             refs: 0,
+            totalAdsWatched: 0, // <-- এই লাইনটি যোগ করুন
             adWatch: 0,
             todayIncome: 0,
             totalWithdrawn: 0,
