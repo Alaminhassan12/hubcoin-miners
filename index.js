@@ -93,7 +93,7 @@ bot.start(async (ctx) => {
                     console.log(`User was referred by: ${referrerId}`);
                     batch.update(referrerRef, {
                         balance: admin.firestore.FieldValue.increment(25),
-                        gems: admin.firestore.FieldValue.increment(2), // এই লাইনটি পরিবর্তন করা হয়েছে
+                        unclaimedGems: admin.firestore.FieldValue.increment(2),
                         refs: admin.firestore.FieldValue.increment(1)
                     });
 
@@ -154,6 +154,60 @@ bot.start(async (ctx) => {
 
 
 // --- API ENDPOINT FOR MINI APP ---
+
+app.post('/claim-gems', async (req, res) => {
+    const { userId } = req.body;
+
+    if (!userId) {
+        return res.status(400).json({ message: "ব্যবহারকারীর আইডি প্রয়োজন।" });
+    }
+
+    const userRef = db.collection('users').doc(String(userId));
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new Error("ব্যবহারকারীকে খুঁজে পাওয়া যায়নি।");
+            }
+
+            const userData = userDoc.data();
+            const { unclaimedGems, lastClaimDate, claimedGemsToday } = userData;
+            
+            if (unclaimedGems <= 0) {
+                throw new Error("আপনার ক্লেইম করার মতো কোনো জেম নেই।");
+            }
+
+            const today = new Date().toISOString().slice(0, 10); // Format: YYYY-MM-DD
+            let currentClaimCount = claimedGemsToday || 0;
+
+            // If it's a new day, reset the daily claim count
+            if (lastClaimDate !== today) {
+                currentClaimCount = 0;
+            }
+            
+            if (currentClaimCount >= 6) {
+                throw new Error("আপনি জেম ক্লেইম করার দৈনিক সীমা (৬টি) অতিক্রম করেছেন।");
+            }
+            
+            const gemsToClaim = Math.min(unclaimedGems, 6 - currentClaimCount);
+
+            transaction.update(userRef, {
+                unclaimedGems: admin.firestore.FieldValue.increment(-gemsToClaim),
+                gems: admin.firestore.FieldValue.increment(gemsToClaim),
+                claimedGemsToday: admin.firestore.FieldValue.increment(gemsToClaim),
+                lastClaimDate: today
+            });
+        });
+
+        res.status(200).json({ message: "সফলভাবে জেম ক্লেইম করা হয়েছে!" });
+
+    } catch (error) {
+        console.error(`Error claiming gems for user ${userId}:`, error.message);
+        res.status(400).json({ message: error.message });
+    }
+});
+
 
 // --- ADVANCED MAILING/BROADCAST FEATURE WITH CONFIRMATION ---
 
