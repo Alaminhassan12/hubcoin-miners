@@ -146,7 +146,7 @@ bot.start(async (ctx) => {
                     [{ text: 'চ্যানেলে যোগ দিন', url: 'https://t.me/HubCoin_miner' }],
                     
                     // সারি ৩: নতুন ইউটিউব বাটন
-                    [{ text: 'কিভাবে কাজ করবেন!', url: 'https://www.facebook.com/share/v/1GXX4q7CSi/' }]
+                    [{ text: 'কিভাবে কাজ করবেন!', url: 'https://www.facebook.com/share/v/1DKbo61opw/' }]
                 ]
             }
         }
