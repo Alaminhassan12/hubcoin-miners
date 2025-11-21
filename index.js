@@ -71,7 +71,6 @@ bot.start(async (ctx) => {
             lastClaimDate: null, // This and below are for gem claims
             claimedGemsToday: 0,
             completedTasks: [], // For bonus tasks
-            leaderboardUnlocked: false // <-- শুধু এই লাইনটি যোগ করুন
         };
 
         try {
