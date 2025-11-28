@@ -3,6 +3,7 @@ const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios'); // ফাইলটির উপরে ইমপোর্ট করতে হবে (npm install axios)
 
 // --- INITIALIZATION ---
 
@@ -344,6 +345,81 @@ app.get('/api/grant-reward-firestore', async (req, res) => {
     } catch (error) {
         console.error(`Adsgram Callback Error (User ${userid}):`, error);
         res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+});
+
+// ✅ API: CHECK BALANCE (For HubCoin Verification)
+app.post('/api/check-balance', async (req, res) => {
+    const { userId } = req.body;
+
+    try {
+        const userRef = db.collection('users').doc(String(userId));
+        const userSnap = await userRef.get();
+
+        if (!userSnap.exists) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const data = userSnap.data();
+        const balance = data.balance || 0; // Using 'balance' to match your schema
+
+        // Return the balance
+        res.json({ success: true, balance: balance });
+
+    } catch (error) {
+        console.error("Balance Check Error:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// HubCoin Backend - index.js (Express App এর ভেতরে)
+
+// ...
+
+app.post('/verify-pocket-money', async (req, res) => {
+    const { userId, taskId } = req.body;
+    
+    // Pocket Money ব্যাকএন্ড URL (আপনার Pocket Money অ্যাপের আসল লিংক দিন)
+    // উদাহরণ: "https://pocket-quiz.onrender.com/api/check-balance"
+    const POCKET_MONEY_API = "https://pocket-quiz.onrender.com/api/check-balance"; 
+
+    try {
+        // ১. HubCoin এ চেক: ইউজার কি অলরেডি রিওয়ার্ড পেয়েছে?
+        const userRef = db.collection('users').doc(String(userId));
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) return res.status(404).json({ success: false, message: "User not found" });
+        if (userDoc.data().completedTasks && userDoc.data().completedTasks.includes(taskId)) {
+            return res.json({ success: true, message: "Already completed." });
+        }
+
+        // ২. Pocket Money অ্যাপে রিকোয়েস্ট পাঠানো (ব্যালেন্স চেক করার জন্য)
+        const pmResponse = await axios.post(POCKET_MONEY_API, { userId: userId });
+        
+        // ৩. ব্যালেন্স ভ্যালিডেশন (২০০ টাকা বা বেশি)
+        const pmBalance = pmResponse.data.balance || 0;
+        
+        if (pmBalance >= 200) {
+            // শর্ত পূরণ হয়েছে: ১০ জেম দিন
+            await userRef.update({
+                gems: admin.firestore.FieldValue.increment(10),
+                completedTasks: admin.firestore.FieldValue.arrayUnion(taskId)
+            });
+            
+            // ট্রানজেকশন হিস্ট্রিতেও রাখতে পারেন
+            // ...
+
+            return res.json({ success: true, message: "Task Verified!" });
+        } else {
+            return res.json({ 
+                success: false, 
+                message: `আপনার Pocket Money ব্যালেন্স ${pmBalance}৳। টাস্কের জন্য ২০০৳ প্রয়োজন।` 
+            });
+        }
+
+    } catch (error) {
+        console.error("Verification API Error:", error.message);
+        return res.json({ success: false, message: "যাচাইকরণে ত্রুটি হয়েছে। অনুগ্রহ করে Pocket Money অ্যাপটি চেক করুন।" });
     }
 });
 
