@@ -423,6 +423,49 @@ app.post('/verify-pocket-money', async (req, res) => {
     }
 });
 
+// --- API: Verify Human ---
+app.post('/api/verify-human', async (req, res) => {
+    const { userId, name, age, district } = req.body;
+
+    if (!userId || !name || !age || !district) {
+        return res.status(400).json({ success: false, message: "সব তথ্য প্রদান করুন।" });
+    }
+
+    const userRef = db.collection('users').doc(String(userId));
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new Error("ব্যবহারকারী পাওয়া যায়নি।");
+            }
+            
+            const userData = userDoc.data();
+            if (userData.isVerified) {
+                throw new Error("আপনি ইতিমধ্যেই ভেরিফাইড।");
+            }
+
+            // আপডেট করা
+            transaction.update(userRef, {
+                isVerified: true,
+                verificationData: { // ইউজারের সাবমিট করা ডাটা সেভ করা
+                    submittedName: name,
+                    age: age,
+                    district: district,
+                    verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+                },
+                completedTasks: admin.firestore.FieldValue.arrayUnion('verify_human_task') // টাস্ক কমপ্লিট হিসেবে মার্ক করা
+            });
+        });
+
+        res.json({ success: true, message: "Verification Successful" });
+
+    } catch (error) {
+        console.error("Verify API Error:", error.message);
+        res.status(400).json({ success: false, message: error.message });
+    }
+});
+
 // --- START SERVER AND BOT ---
 
 const PORT = process.env.PORT || 3000;
