@@ -30,7 +30,17 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // --- TELEGRAM BOT LOGIC ---
 
-// +++ নতুন এবং আপগ্রেড করা bot.start ফাংশন +++
+// এই ফাংশনটি ফাইলের শুরুতে বা bot.start এর আগে যোগ করতে পারেন (অথবা bot.start এর ভেতরেও রাখতে পারেন)
+function escapeHtml(text) {
+    if (!text) return text;
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 bot.start(async (ctx) => {
     const referrerId = ctx.startPayload;
     const newUser = ctx.from;
@@ -38,11 +48,10 @@ bot.start(async (ctx) => {
     const userDoc = await userRef.get();
 
     // ১. ব্যবহারকারীর প্রোফাইল ছবির URL নিয়ে আসুন
-    let photoUrl = `https://i.pravatar.cc/150?u=${newUser.id}`; // ডিফল্ট ছবি
+    let photoUrl = `https://i.pravatar.cc/150?u=${newUser.id}`; 
     try {
         const userProfilePhotos = await ctx.telegram.getUserProfilePhotos(newUser.id);
         if (userProfilePhotos.total_count > 0) {
-            // সবচেয়ে ভালো কোয়ালিটির ছবিটি (সাধারণত শেষেরটি) নিন
             const fileId = userProfilePhotos.photos[0].pop().file_id;
             const fileLink = await ctx.telegram.getFileLink(fileId);
             photoUrl = fileLink.href;
@@ -54,24 +63,24 @@ bot.start(async (ctx) => {
     // ২. ব্যবহারকারী নতুন হলে তাকে তৈরি করুন
     if (!userDoc.exists) {
         console.log(`New user detected: ${newUser.first_name} (ID: ${newUser.id})`);
-        
+
         const newUserPayload = {
             name: newUser.first_name,
             username: newUser.username || '',
-            photoUrl: photoUrl, // +++ নতুন ফিল্ড যোগ করা হলো +++
+            photoUrl: photoUrl,
             balance: 25,
             gems: 0,
             unclaimedGems: 0,
             refs: 0,
-            totalAdsWatched: 0, // <-- এই লাইনটি যোগ করুন
+            totalAdsWatched: 0,
             adWatch: 0,
             todayIncome: 0,
             totalWithdrawn: 0,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             referredBy: referrerId || null,
-            lastClaimDate: null, // This and below are for gem claims
+            lastClaimDate: null,
             claimedGemsToday: 0,
-            completedTasks: [], // For bonus tasks
+            completedTasks: [],
         };
 
         try {
@@ -91,61 +100,59 @@ bot.start(async (ctx) => {
                 const referrerRef = db.collection('users').doc(referrerId);
                 const referrerDoc = await referrerRef.get();
                 if (referrerDoc.exists) {
-                    console.log(`User was referred by: ${referrerId}`);
                     batch.update(referrerRef, {
                         balance: admin.firestore.FieldValue.increment(25),
                         unclaimedGems: admin.firestore.FieldValue.increment(2),
                         refs: admin.firestore.FieldValue.increment(1)
                     });
 
-                    // Notify referrer outside the batch
-                    ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${newUser.first_name}, জয়েন করেছে। আপনি 25 টাকা এবং 2টি জেম পেয়েছেন!`)
-                        .catch(err => console.log(`Failed to notify referrer ${referrerId}:`, err.message));
+                    // Notify referrer safely
+                    try {
+                        await ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${escapeHtml(newUser.first_name)}, জয়েন করেছে। আপনি 25 টাকা এবং 2টি জেম পেয়েছেন!`);
+                    } catch (err) {
+                        console.log(`Failed to notify referrer ${referrerId}:`, err.message);
+                    }
                 }
             }
 
             await batch.commit();
-            console.log(`Successfully created new user ${newUser.id} with photo URL.`);
+            console.log(`Successfully created new user ${newUser.id}.`);
         } catch (error) {
             console.error("Error during new user creation:", error);
         }
-    // ৩. ব্যবহারকারী পুরনো হলে, শুধু তার নাম এবং ছবি আপডেট করুন
     } else {
         await userRef.update({
             name: newUser.first_name,
-            photoUrl: photoUrl // ব্যবহারকারী ছবি পরিবর্তন করলে যেন আপডেট হয়ে যায়
+            photoUrl: photoUrl
         });
     }
 
-    // Send welcome message to all users (new and old) on /start
     const miniAppUrl = process.env.FRONTEND_URL;
 
-    // ছবির মতো নতুন ক্যাপশন
-    const newCaption = `🌟 **HubCoin-এ স্বাগতম, ${newUser.first_name}!**
+    // নামের মধ্যে থাকা বিশেষ ক্যারেক্টারগুলো HTML এ কনভার্ট করা হলো যাতে এরর না দেয়
+    const safeName = escapeHtml(newUser.first_name);
+
+    // 👇 এখানে পরিবর্তন করা হয়েছে: ** এর বদলে <b> ব্যবহার করা হয়েছে এবং parse_mode: 'HTML' দেওয়া হয়েছে
+    const newCaption = `🌟 <b>HubCoin-এ স্বাগতম, ${safeName}!</b>
 আপনার প্রতিদিনের আয়ের যাত্রা এখন শুরু।
 
-💰 **যেভাবে আয় করবেন:**
-- **বিজ্ঞাপন দেখুন:** প্রতিটি বিজ্ঞাপনের জন্য ৳15 আয় করুন।
-- **বন্ধুদের রেফার করুন:** প্রতিটি রেফারের জন্য ৳25 পান।
+💰 <b>যেভাবে আয় করবেন:</b>
+- <b>বিজ্ঞাপন দেখুন:</b> প্রতিটি বিজ্ঞাপনের জন্য ৳15 আয় করুন।
+- <b>বন্ধুদের রেফার করুন:</b> প্রতিটি রেফারের জন্য ৳25 পান।
 
-💸 **টাকা উত্তোলন:**
+💸 <b>টাকা উত্তোলন:</b>
 - খুব সহজে বিকাশ, নগদ, বা বাইন্যান্সের মাধ্যমে ক্যাশ আউট করুন।`;
 
     await ctx.replyWithPhoto(
-        'https://i.postimg.cc/J4YSvR0M/start-image.png', // আপনি চাইলে ছবির URL পরিবর্তন করতে পারেন
+        'https://i.postimg.cc/J4YSvR0M/start-image.png',
         {
             caption: newCaption,
-            parse_mode: 'Markdown', // এই লাইনটি খুবই গুরুত্বপূর্ণ
+            parse_mode: 'HTML', // 👈 এটি অবশ্যই HTML হতে হবে
 
             reply_markup: {
                 inline_keyboard: [
-                    // সারি ১: আগের বাটনটি
                     [{ text: '🚀 মিনি অ্যাপ খুলুন', web_app: { url: miniAppUrl } }],
-                    
-                    // সারি ২: নতুন জয়েন চ্যানেল বাটন
                     [{ text: 'চ্যানেলে যোগ দিন', url: 'https://t.me/HubCoin_miner' }],
-                    
-                    // সারি ৩: নতুন ইউটিউব বাটন
                     [{ text: 'কিভাবে কাজ করবেন!', url: 'https://www.facebook.com/share/v/1DKbo61opw/' }]
                 ]
             }
