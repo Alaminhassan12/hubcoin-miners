@@ -98,27 +98,48 @@ bot.start(async (ctx) => {
 
             if (referrerId) {
                 const referrerRef = db.collection('users').doc(referrerId);
-                const referrerDoc = await referrerRef.get();
-                if (referrerDoc.exists) {
-                    batch.update(referrerRef, {
-                        balance: admin.firestore.FieldValue.increment(25),
-                        unclaimedGems: admin.firestore.FieldValue.increment(2),
-                        refs: admin.firestore.FieldValue.increment(1)
-                    });
+                
+                await db.runTransaction(async (t) => {
+                    const referrerDoc = await t.get(referrerRef);
+                    if (referrerDoc.exists) {
+                        const refData = referrerDoc.data();
+                        const today = new Date().toISOString().slice(0, 10);
+                        
+                        // দৈনিক রেফার কাউন্ট লজিক
+                        let newDailyCount = 1;
+                        let currentVouchers = { v9: false, v19: false }; // ডিফল্ট
 
-                    // Notify referrer safely
-                    try {
-                        await ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${escapeHtml(newUser.first_name)}, জয়েন করেছে। আপনি 25 টাকা এবং 2টি জেম পেয়েছেন!`);
-                    } catch (err) {
-                        console.log(`Failed to notify referrer ${referrerId}:`, err.message);
+                        if (refData.lastRefDate === today) {
+                            newDailyCount = (refData.dailyRefCount || 0) + 1;
+                            currentVouchers = refData.dailyVouchers || { v9: false, v19: false };
+                        }
+
+                        t.update(referrerRef, {
+                            balance: admin.firestore.FieldValue.increment(25),
+                            unclaimedGems: admin.firestore.FieldValue.increment(2),
+                            refs: admin.firestore.FieldValue.increment(1),
+                            
+                            // নতুন ফিল্ডগুলো আপডেট
+                            dailyRefCount: newDailyCount,
+                            lastRefDate: today,
+                            dailyVouchers: currentVouchers
+                        });
                     }
-                }
+                });
+                
+                // ... (Notification sending code remains same)
             }
 
             await batch.commit();
             console.log(`Successfully created new user ${newUser.id}.`);
         } catch (error) {
             console.error("Error during new user creation:", error);
+        }
+        // Notify referrer safely (moved outside transaction)
+        try {
+            await ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${escapeHtml(newUser.first_name)}, জয়েন করেছে। আপনি 25 টাকা এবং 2টি জেম পেয়েছেন!`);
+        } catch (err) {
+            console.log(`Failed to notify referrer ${referrerId}:`, err.message);
         }
     } else {
         await userRef.update({
@@ -469,6 +490,56 @@ app.post('/api/verify-human', async (req, res) => {
 
     } catch (error) {
         console.error("Verify API Error:", error.message);
+        res.status(400).json({ success: false, message: error.message });
+    }
+});
+
+// --- নতুন API: ভাউচার ক্লেইম করার জন্য (index.js এর শেষে যোগ করুন) ---
+
+app.post('/api/claim-ref-voucher', async (req, res) => {
+    const { userId, voucherType } = req.body; // voucherType হবে 'v9' অথবা 'v19'
+
+    try {
+        const userRef = db.collection('users').doc(String(userId));
+        
+        await db.runTransaction(async (t) => {
+            const userDoc = await t.get(userRef);
+            if (!userDoc.exists) throw new Error("User not found");
+
+            const data = userDoc.data();
+            const today = new Date().toISOString().slice(0, 10);
+
+            // চেক ১: আজকের ডেটা কিনা
+            if (data.lastRefDate !== today) {
+                throw new Error("আজকের কোনো রেফারেল ডেটা নেই বা মেয়াদ শেষ।");
+            }
+
+            // চেক ২: ভাউচার টার্গেট পূরণ হয়েছে কিনা
+            const count = data.dailyRefCount || 0;
+            if (voucherType === 'v9' && count < 9) throw new Error("৯টি রেফার পূর্ণ হয়নি।");
+            if (voucherType === 'v19' && count < 19) throw new Error("১৯টি রেফার পূর্ণ হয়নি।");
+
+            // চেক ৩: অলরেডি ক্লেইম করা হয়েছে কিনা
+            const vouchers = data.dailyVouchers || { v9: false, v19: false };
+            if (vouchers[voucherType]) {
+                throw new Error("এই ভাউচারটি ইতিমধ্যে ক্লেইম করা হয়েছে।");
+            }
+
+            // রিওয়ার্ড নির্ধারণ
+            const reward = (voucherType === 'v9') ? 10 : 25; // ১৯ রেফারে ২৫ জেম (বোনাস)
+
+            // আপডেট
+            vouchers[voucherType] = true;
+            
+            t.update(userRef, {
+                gems: admin.firestore.FieldValue.increment(reward),
+                dailyVouchers: vouchers
+            });
+        });
+
+        res.json({ success: true, message: "ভাউচার রিওয়ার্ড যোগ করা হয়েছে!" });
+
+    } catch (error) {
         res.status(400).json({ success: false, message: error.message });
     }
 });
