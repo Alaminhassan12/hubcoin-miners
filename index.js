@@ -164,11 +164,12 @@ bot.start(async (ctx) => {
 💸 <b>টাকা উত্তোলন:</b>
 - খুব সহজে বিকাশ, নগদ, বা বাইন্যান্সের মাধ্যমে ক্যাশ আউট করুন।`;
 
+    // 👇 এখানে আপনার নতুন ফায়ারবেস ইমেজের লিংকটি বসানো হলো
     await ctx.replyWithPhoto(
-        'https://i.postimg.cc/J4YSvR0M/start-image.png',
+        'https://firebasestorage.googleapis.com/v0/b/hub-coin-94aff.firebasestorage.app/o/start-photo.jpg?alt=media&token=be5e1f04-6228-4ef5-9c5d-e1c56b83e56f',
         {
             caption: newCaption,
-            parse_mode: 'HTML', // 👈 এটি অবশ্যই HTML হতে হবে
+            parse_mode: 'HTML', // HTML মোড চালু থাকবে
 
             reply_markup: {
                 inline_keyboard: [
