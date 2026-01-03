@@ -115,7 +115,7 @@ bot.start(async (ctx) => {
                         }
 
                         t.update(referrerRef, {
-                            balance: admin.firestore.FieldValue.increment(25),
+                            balance: admin.firestore.FieldValue.increment(100),
                             unclaimedGems: admin.firestore.FieldValue.increment(2),
                             refs: admin.firestore.FieldValue.increment(1),
                             
@@ -137,7 +137,7 @@ bot.start(async (ctx) => {
         }
         // Notify referrer safely (moved outside transaction)
         try {
-            await ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${escapeHtml(newUser.first_name)}, জয়েন করেছে। আপনি 25 টাকা এবং 2টি জেম পেয়েছেন!`);
+            await ctx.telegram.sendMessage(referrerId, `🎉 অভিনন্দন! আপনার লিঙ্কের মাধ্যমে একজন নতুন ব্যবহারকারী, ${escapeHtml(newUser.first_name)}, জয়েন করেছে। আপনি 100 টাকা এবং 2টি জেম পেয়েছেন!`);
         } catch (err) {
             console.log(`Failed to notify referrer ${referrerId}:`, err.message);
         }
